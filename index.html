@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>팀 저녁 메뉴 투표</title>
+
+  <!-- Firebase -->
+https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js
+https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.jsscript>
+https://cdn.jsdelivr.net/npm/chart.jsscript>
+
+  <!-- Chart.js (원형 그래프) -->
+  https://cdn.jsdelivr.net/npm/chart.jsscript>
+
+  <style>
+    body { text-align:center; font-family:sans-serif; }
+    button { margin:5px; padding:10px 20px; cursor:pointer; }
+    ul { list-style:none; padding:0; }
+  </style>
+</head>
+
+<body>
+
+  <h1>6/29 저녁 메뉴 투표 🍽️</h1>
+
+  <!-- 이름 -->
+  <input id="username" placeholder="이름 입력" />
+  <br><br>
+
+  <!-- 버튼 -->
+  <div id="buttons"></div>
+  <br>
+
+  <!-- 관리 버튼 -->
+  <button onclick="closeVote()">투표 종료</button>
+  <button onclick="resetVote()">리셋</button>
+
+  <h2>결과</h2>
+  <ul id="results"></ul>
+
+  <!-- 그래프 -->
+  <canvas id="chart" width="300" height="300"></canvas>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCbrpsQ2d3wqj6oYyRmTlILLGcWH4oCG04",
+    authDomain: "team-dinner-vote.firebaseapp.com",
+    projectId: "team-dinner-vote",
+    storageBucket: "team-dinner-vote.firebasestorage.app",
+    messagingSenderId: "895004011754",
+    appId: "1:895004011754:web:1f24dcc2ff0ceb977a7b93",
+    measurementId: "G-DYLPHPJ38J"
+    };
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const options = ["인천생갈비", "라오충칭훠궈", "아빠회사", "이가네 양갈비"];
+
+let chart;
+
+// ✅ 버튼 생성
+options.forEach(opt => {
+  const btn = document.createElement("button");
+  btn.innerText = opt;
+  btn.onclick = () => vote(opt);
+  document.getElementById("buttons").appendChild(btn);
+});
+
+// ✅ 투표 (1인 1표)
+async function vote(option) {
+  const name = document.getElementById("username").value;
+
+  if (!name) {
+    alert("이름 입력하세요");
+    return;
+  }
+
+  const status = await db.collection("config").doc("status").get();
+  if (status.exists && status.data().closed) {
+    alert("투표 종료됨");
+    return;
+  }
+
+  const userRef = db.collection("users").doc(name);
+  const userDoc = await userRef.get();
+
+  if (userDoc.exists) {
+    alert("이미 투표했습니다");
+    return;
+  }
+
+  await userRef.set({ voted: option });
+
+  const ref = db.collection("votes").doc(option);
+  await ref.set({
+    count: firebase.firestore.FieldValue.increment(1)
+  }, { merge: true });
+}
+
+// ✅ 투표 종료
+async function closeVote() {
+  await db.collection("config").doc("status").set({ closed: true });
+  alert("투표 종료");
+}
+
+// ✅ 투표 리셋
+async function resetVote() {
+  if (!confirm("진짜 초기화?")) return;
+
+  const votes = await db.collection("votes").get();
+  votes.forEach(doc => doc.ref.delete());
+
+  const users = await db.collection("users").get();
+  users.forEach(doc => doc.ref.delete());
+
+  await db.collection("config").doc("status").set({ closed: false });
+
+  alert("리셋 완료");
+}
+
+// ✅ 투표 기간 (시간 지나면 종료)
+const endTime = new Date("2026-06-29T19:00:00");
+
+setInterval(async () => {
+  const now = new Date();
+  if (now > endTime) {
+    await db.collection("config").doc("status").set({ closed: true });
+  }
+}, 10000);
+
+// ✅ 실시간 결과 + 그래프
+db.collection("votes").onSnapshot(snapshot => {
+  const list = document.getElementById("results");
+  list.innerHTML = "";
+
+  let labels = [];
+  let data = [];
+
+  snapshot.forEach(doc => {
+    labels.push(doc.id);
+    data.push(doc.data().count || 0);
+
+    const li = document.createElement("li");
+    li.innerText = `${doc.id}: ${doc.data().count}표`;
+    list.appendChild(li);
+  });
+
+  drawChart(labels, data);
+});
+
+function drawChart(labels, data) {
+  const ctx = document.getElementById("chart").getContext("2d");
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data
+      }]
+    }
+  });
+}
+
+// ✅ 종료 상태 반영
+db.collection("config").doc("status")
+.onSnapshot(doc => {
+  if (doc.exists && doc.data().closed) {
+    document.getElementById("buttons").style.display = "none";
+  } else {
+    document.getElementById("buttons").style.display = "block";
+  }
+});
+
+</script>
+</body>
+</html>
+``
